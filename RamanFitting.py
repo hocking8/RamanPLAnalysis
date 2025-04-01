@@ -285,64 +285,69 @@ def fit_peaks(wavenumbers, intensity, plot=False, method='lorentzian',
     return popt, rss, max_peak, FWHM
 
 
-def plot_map(data, positions, cb_label=None, vmin=None, vmax=None, savefig=False, savename=None):
-	"""
-	Takes in a some array of (x, y) tuples corresponding to various 
-	positions, some data array with the same length as the positions 
-	array, and a label for the data value in the data array.
+def plot_map(data, positions, cb_label=None, vmin=None, vmax=None, savefig=False, savename=None,
+             allowed_range=[0, np.inf]):
+    """
+    Takes in a some array of (x, y) tuples corresponding to various 
+    positions, some data array with the same length as the positions 
+    array, and a label for the data value in the data array.
 
-	Works for all kinds of maps (rectangular, non-rectangular, and
-	lines).
-	"""
+    Allowed range is the [min, max] value for this data. Will not be
+    plotted if the value is outside of this range.
 
-	# collect all potential x and y values
-	xs = []
-	ys = []
-	for x, y in positions:
-		xs.append(float(x))
-		ys.append(float(y))
+    Works for all kinds of maps (rectangular, non-rectangular, and
+    lines).
+    """
 
-	# remove non-unique values
-	x_bare = list(set(xs))
-	y_bare = list(set(ys))
-	x_sort = np.asarray(sorted(x_bare))
-	y_sort = np.asarray(sorted(y_bare))
+    # collect all potential x and y values
+    xs = []
+    ys = []
+    for x, y in positions:
+        xs.append(float(x))
+        ys.append(float(y))
 
-	data_mat = np.zeros((len(x_sort), len(y_sort))) # initialize array to hold fit values
-	print(data_mat.shape)
+    # remove non-unique values
+    x_bare = list(set(xs))
+    y_bare = list(set(ys))
+    x_sort = np.asarray(sorted(x_bare))
+    y_sort = np.asarray(sorted(y_bare))
 
-	# go through the data and assign everything to the correct values
-	for i in range(len(positions)):
-		# extract spot x and y
-		x_spot = positions[i][0]
-		y_spot = positions[i][1]
+    data_mat = np.zeros((len(x_sort), len(y_sort))) # initialize array to hold fit values
 
-		# find where they are along the whole scan region
-		x_ind = (np.where(x_sort == x_spot))[0][0]
-		y_ind = (np.where(y_sort == y_spot))[0][0]
+    # go through the data and assign everything to the correct values
+    for i in range(len(positions)):
+        # extract spot x and y
+        x_spot = positions[i][0]
+        y_spot = positions[i][1]
 
-		data_mat[x_ind, y_ind] = data[i]
+        # find where they are along the whole scan region
+        x_ind = (np.where(x_sort == x_spot))[0][0]
+        y_ind = (np.where(y_sort == y_spot))[0][0]
 
-	# move the x and y min back to 0
-	x_sort = x_sort - np.amin(x_sort)
-	y_sort = y_sort - np.amin(y_sort)
+        data_mat[x_ind, y_ind] = data[i]
 
-	print(np.amax(data_mat))
-	print(np.amin(data_mat))
+    # move the x and y min back to 0
+    x_sort = x_sort - np.amin(x_sort)
+    y_sort = y_sort - np.amin(y_sort)
 
-	# plot a 2D grid
-	fig, ax = plt.subplots(layout='constrained')
-	if (len(x_sort) > 1) and (len(y_sort) > 1):
-		X, Y = np.meshgrid(x_sort, y_sort)
-		pc = ax.pcolormesh(y_sort, x_sort, data_mat, shading='nearest', vmin=vmin, vmax=vmax)
-		plt.colorbar(pc, label=cb_label)
-		ax.set_aspect('equal')
-		ax.set_xlabel('X (' + r'$\mu$' + 'm)')
-		ax.set_ylabel('Y (' + r'$\mu$' + 'm)')
-	else:
-		ax.plot(x_sort, data_mat.ravel())
-		ax.set_xlabel('X (' + r'$\mu$' + 'm)')
-		ax.set_ylabel(cb_label)
+    # remove data outside of the allowed range
+    data_mat = np.where((data_mat > allowed_range[0]) & (data_mat < allowed_range[1]), data_mat, np.nan)
+        
+    print(f'Data ranges from {np.amin(data_mat)} to {np.amax(data_mat)}.')
 
-	if savefig:
-		plt.savefig(savename, bbox_inches='tight')
+    # plot a 2D grid
+    fig, ax = plt.subplots(layout='constrained')
+    if (len(x_sort) > 1) and (len(y_sort) > 1):
+        X, Y = np.meshgrid(x_sort, y_sort)
+        pc = ax.pcolormesh(y_sort, x_sort, data_mat, shading='nearest', vmin=vmin, vmax=vmax)
+        plt.colorbar(pc, label=cb_label)
+        ax.set_aspect('equal')
+        ax.set_xlabel('X (' + r'$\mu$' + 'm)')
+        ax.set_ylabel('Y (' + r'$\mu$' + 'm)')
+    else:
+        ax.plot(x_sort, data_mat.ravel())
+        ax.set_xlabel('X (' + r'$\mu$' + 'm)')
+        ax.set_ylabel(cb_label)
+
+    if savefig:
+        plt.savefig(savename, bbox_inches='tight')
