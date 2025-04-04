@@ -13,7 +13,7 @@ import matplotlib.pyplot as plt
 
 
 def remove_linear_background(wavenumbers, intensity, ci=100):
-    """Test
+    """
     Uses the bordering ci (int number) or so points at the end of 
     the Raman spectra to do a linear regression. Works well for scans
     where the peak takes up a lot of the spectra.
@@ -199,13 +199,14 @@ def multi_voigt(x, *params):
     return result
 
 
-def fit_peaks(wavenumbers, intensity, plot=False, method='lorentzian',
-                   guess=[20, 2700, 15, 2000, 2700, 20, 0.5, 10, 2700, 20, 1000, 2675, 25, 0.5], guess2=None):
+def fit_peaks(wavenumbers, intensity, guesses, plot=False, method='lorentzian'):
     """
     Given some data and an estimated peak position, fit
     an integer number of Voigt/Gaussian/Lorentzian curves to the data.
 
-    Default guess is for a Bernal pentalayer graphene 2D peak.
+    Guesses is a N x M 2D nested list where M is the number of parameters for
+    the fitting method you have chosen and N is the number of potential
+    guesses that you want to try (if there are multiple peak shapes).
 
     Can add a second guess to try in case and compare the two.
     Selects whichever guess results in a lower RSS
@@ -221,32 +222,24 @@ def fit_peaks(wavenumbers, intensity, plot=False, method='lorentzian',
     func_dict = {'voigt': multi_voigt, 'lorentzian': multi_lorentzian, 'gaussian': multi_gaussian}
     func = func_dict[method]
     
-    # try the first peak guess
-    try:
-        rss1 = np.inf # initialize in case it doesn't work
-        popt1, pcov1 = curve_fit(func, wavenumbers, intensity, p0=guess, maxfev=10000)
-        peak1 = func(wavenumbers, *popt1)
-        rss1 = compute_rss(wavenumbers, peak1)
-    except:
-        pass
-    # try the second peak guess
-    try:
-        rss2 = np.inf # initialize in case it doesn't work
-        popt2, pcov2 = curve_fit(func, wavenumbers, intensity, p0=guess2, maxfev=10000)
-        peak2 = func(wavenumbers, *popt2)
-        rss2 = compute_rss(wavenumbers, peak2)
-    except:
-        pass
+    # initialize the fitting loop
+    count = 0
+    rss = np.inf # initialize RSS as ridiculously large number
+    while count < len(guesses):
+        # acccount for potential that guess does not converge
+        try:
+            rss_t = 1E10 # some large number less than infinity
+            popt_t, pcov_t = curve_fit(func, wavenumbers, intensity, p0=guesses[count], maxfev=10000)
+            peak_t = func(wavenumbers, *popt_t)
+            rss_t = compute_rss(wavenumbers, peak_t)
 
-    # select the peak with smaller RSS
-    if rss1 < rss2:
-        peak = peak1
-        rss = rss1
-        popt = popt1
-    else:
-        peak = peak2
-        rss = rss2
-        popt = popt2
+            # preserve these fit values if they are better than previous
+            if rss_t < rss:
+                rss, peak, popt = rss_t, peak_t, popt_t
+        except:
+            pass
+    
+        count += 1
 
     try:
         # finding peak and FWHM
