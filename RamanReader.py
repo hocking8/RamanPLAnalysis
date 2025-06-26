@@ -3,8 +3,9 @@
 Name: Risa Hocking
 File: RamanReader.py
 ------------------
-This class takes in some path to a Raman file (map or single spot) and
-returns the data at each point in a large dictionary. 
+This class takes in some path to a Raman or PL file (map or single spot) and
+returns the data at each point in a large dictionary. Will auto-detect and sort
+the units into energy or wavenumbers as well as calculate the other set of values.
 
 Coding is in latin-1 due to the use of some greek characters in the files
 from the Horiba Raman tools (Xplora, Labram).
@@ -21,6 +22,7 @@ class RamanMap():
         self.f = file # filepath
         self.fname = self.get_filename()
         self.wn = None # ndarray of wavenumbers, shape (N, 1)
+        self.energy = None # ndarray of energy, shape (N, 1)
         self.position = None # ndarray of tuples of (X, Y) in µm for each scan, shape (M,1)
         self.intensity = None # ndarray of peak intensities for each positions, shape (M x N)
         self.import_data()
@@ -65,7 +67,14 @@ class RamanMap():
                     # data is a list with the form [[wavenums],[point1_y,point1_x,[point1_intensities]],...,[pointN_y,pointN_x,[pointN_intensities]]]
 
         # sort out the components of the data list
-        self.wn = np.asarray(data[0])
+
+        # check to see if you likely have eV or cm^-1
+        if np.amin(np.asarray(data[0])) < 6:
+            self.energy = np.asarray(data[0])
+            self.wn = 1 / ((1240 / self.energy) * 1E-7)
+        else:
+            self.wn = np.asarray(data[0])
+            self.energy = 1240 / ((1 / self.wn) * 1E7)
         self.position = np.zeros((len(data)-1), dtype=[('x', 'f4'), ('y', 'f4')])
         self.intensity = np.zeros((len(data)-1, len(self.wn)), dtype=np.float32)
      
@@ -86,6 +95,7 @@ class RamanSpot():
         self.f = file # filepath
         self.filename = self.get_filename()
         self.wn = None # ndarray of wavenumbers, shape (N, 1)
+        self.energy = None # ndarray of energy, shape (N, 1)
         self.intensity = None # ndarray of peak intensities, shape (N, 1)
         self.import_data()
 
@@ -102,7 +112,7 @@ class RamanSpot():
         """
         Extracts the data from the file. 
         """
-        wn_data = [] # initialize this as a list
+        x_data = [] # initialize this as a list
         int_data = [] # initialize this as a list
         header = [] # initialize this as a list
 
@@ -115,10 +125,18 @@ class RamanSpot():
                     header.append(line)
                 else: # line not in header
                     parts = line.split(' ') # split by space
-                    wn_data.append(parts[0])
+                    x_data.append(parts[0])
                     int_data.append(parts[1])
 
         # turn the components into arrays
-        self.wn = np.asarray(wn_data)
+        # check to see if likely eV or cm^-1
+        if np.amin(np.asarray(x_data)) < 5:
+            self.energy = np.asarray(x_data)
+            self.wn = 1 / ((1240 / self.energy) * 1E-7)
+        else:
+            self.wn = np.asarray(x_data)
+            self.energy = 1240 / ((1 / self.wn) * 1E7)
+
         self.intensity = np.asarray(int_data)
+
      
