@@ -12,6 +12,7 @@ from scipy.stats import linregress
 import matplotlib.pyplot as plt
 
 
+
 def remove_linear_background(wavenumbers, intensity, ci=100):
     """
     Uses the bordering ci (int number) or so points at the end of 
@@ -199,7 +200,7 @@ def multi_voigt(x, *params):
     return result
 
 
-def fit_peaks(wavenumbers, intensity, guesses, plot=False, method='lorentzian'):
+def fit_peaks(wavenumbers, intensity, guesses, plot=False, method='lorentzian', fwhm_tol=0.5):
     """
     Given some data and an estimated peak position, fit
     an integer number of Voigt/Gaussian/Lorentzian curves to the data.
@@ -207,6 +208,9 @@ def fit_peaks(wavenumbers, intensity, guesses, plot=False, method='lorentzian'):
     Guesses is a N x M 2D nested list where M is the number of parameters for
     the fitting method you have chosen and N is the number of potential
     guesses that you want to try (if there are multiple peak shapes).
+
+    fwhm_tol is a float that provides the tolerance value (in wavenumbers)
+    for computing the full width half max of a peak.
 
     Can add a second guess to try in case and compare the two.
     Selects whichever guess results in a lower RSS
@@ -224,6 +228,7 @@ def fit_peaks(wavenumbers, intensity, guesses, plot=False, method='lorentzian'):
     
     # initialize the fitting loop
     count = 0
+    success = False # determing if this worked later
     rss = np.inf # initialize RSS as ridiculously large number
     while count < len(guesses):
         # acccount for potential that guess does not converge
@@ -231,11 +236,13 @@ def fit_peaks(wavenumbers, intensity, guesses, plot=False, method='lorentzian'):
             rss_t = 1E10 # some large number less than infinity
             popt_t, pcov_t = curve_fit(func, wavenumbers, intensity, p0=guesses[count], maxfev=10000)
             peak_t = func(wavenumbers, *popt_t)
-            rss_t = compute_rss(wavenumbers, peak_t)
+            rss_t = compute_rss(intensity, peak_t)
 
             # preserve these fit values if they are better than previous
             if rss_t < rss:
                 rss, peak, popt = rss_t, peak_t, popt_t
+
+            success = True
         except:
             pass
     
@@ -244,14 +251,15 @@ def fit_peaks(wavenumbers, intensity, guesses, plot=False, method='lorentzian'):
     try:
         # finding peak and FWHM
         max_peak = wavenumbers[np.where(np.amax(peak) == peak)][0]
-        FWHM_vec = wavenumbers[np.where(abs(np.amax(peak)/2 - peak) < 0.5)]
+        FWHM_vec = wavenumbers[np.where(abs(np.amax(peak)/2 - peak) < fwhm_tol)]
         FWHM = abs(FWHM_vec[0] - FWHM_vec[-1])
     except:
         max_peak = np.nan
         FWHM = np.nan
 
-    if plot:
+    if plot and success:
         ax = plt.gca()
+        # allow for the fitting to not have worked out
         # plot the fully convoluted peaks
         curve = ax.plot(wavenumbers, peak, 'k--')
 
@@ -275,11 +283,15 @@ def fit_peaks(wavenumbers, intensity, guesses, plot=False, method='lorentzian'):
                 c = curve[0].get_color()
                 ax.fill_between(wavenumbers, peak.min(), peak, facecolor=c, alpha=0.5)
 
-    return popt, rss, max_peak, FWHM
+    # return the variables only if the fitting worked
+    if success:
+        return popt, rss, max_peak, FWHM
+    else:
+        return None, None, None, None
 
 
 def plot_map(data, positions, cb_label=None, vmin=None, vmax=None, savefig=False, savename=None,
-             allowed_range=[0, np.inf]):
+             allowed_range=[0, np.inf], choice = 'Raman'):
     """
     Takes in a some array of (x, y) tuples corresponding to various 
     positions, some data array with the same length as the positions 
